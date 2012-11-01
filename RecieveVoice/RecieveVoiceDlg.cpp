@@ -354,6 +354,8 @@ HCURSOR CRecieveVoiceDlg::OnQueryDragIcon()
 
 LRESULT CRecieveVoiceDlg::OnDataCome(WPARAM wParam, LPARAM lParam)
 {
+	bool bRecv = false;
+	static int nNoRecvTimes = 0;
 	int rLength, lenofAcceptAddr = sizeof(SOCKADDR);
 	// 正在播放第一个缓冲区，用第二个缓冲区接收
 	if (m_bPlayFirst)
@@ -371,6 +373,7 @@ LRESULT CRecieveVoiceDlg::OnDataCome(WPARAM wParam, LPARAM lParam)
 		m_bPlayFirst = FALSE;
 		::PostMessage(hwnd, WM_PLAY, 0, 0);
 		GetDlgItem(IDC_STATIC_INFO)->SetWindowText(_T("收到信息1"));
+		bRecv = true;
 	}
 	// 正在播放第二个缓冲区，用第一个缓冲区接收
 	else
@@ -388,6 +391,19 @@ LRESULT CRecieveVoiceDlg::OnDataCome(WPARAM wParam, LPARAM lParam)
 		m_bPlayFirst = TRUE;
 		::PostMessage(hwnd, WM_PLAY, 0, 0);
 		GetDlgItem(IDC_STATIC_INFO)->SetWindowText(_T("收到信息2"));
+		bRecv = true;
+	}
+
+	//为了防止发送端断开而造成接收端卡死
+	if (bRecv)
+	{
+		nNoRecvTimes = 0;
+	} 
+	else
+	{
+		nNoRecvTimes ++;
+		if ( nNoRecvTimes > 10 )
+			memset(&m_SendAddr,0,sizeof(m_SendAddr));
 	}
 	return 0;
 }
