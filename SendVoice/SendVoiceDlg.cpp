@@ -57,12 +57,15 @@ CSendVoiceDlg::CSendVoiceDlg(CWnd* pParent /*=NULL*/)
 	, m_sSaveFile(_T(""))
 	, hWaveIn(NULL)
 	, m_hMixer(NULL)
+	, m_hWaveOut(NULL)
+	, m_bPlayFirst(TRUE)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
 	m_dataBuf	= NULL;
 	m_dataLen	= 0;
 	hWaveIn		= NULL;
+	m_nAcceptAddrLen	= sizeof(SOCKADDR_IN);
 }
 
 void CSendVoiceDlg::DoDataExchange(CDataExchange* pDX)
@@ -83,8 +86,9 @@ BEGIN_MESSAGE_MAP(CSendVoiceDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_CHECK_T1, &CSendVoiceDlg::OnCheckT1)
 	ON_BN_CLICKED(IDC_CHECK_T2, &CSendVoiceDlg::OnCheckT2)
 	ON_WM_HSCROLL()
-//	ON_BN_CLICKED(IDC_BUTTON1, &CSendVoiceDlg::OnBnClickedButton1)
 	ON_MESSAGE(MM_MIXM_CONTROL_CHANGE, &CSendVoiceDlg::OnVolumeChanged)
+	ON_MESSAGE(WM_DATACOME, &CSendVoiceDlg::OnDataCome)
+	ON_MESSAGE(WM_PLAY, &CSendVoiceDlg::OnPlay)
 END_MESSAGE_MAP()
 
 
@@ -144,10 +148,6 @@ BOOL CSendVoiceDlg::OnInitDialog()
 		WSACleanup();
 		return FALSE;
 	}
-// 	USES_CONVERSION;
-// 	m_sendAddr.sin_family	= AF_INET;
-// 	m_sendAddr.sin_port		= htons(6666);
-// 	m_sendAddr.sin_addr.s_addr	= inet_addr(W2A(_T("127.0.0.1")));
 
 	hwnd = AfxGetMainWnd()->m_hWnd;
 
@@ -158,10 +158,12 @@ BOOL CSendVoiceDlg::OnInitDialog()
 		MessageBox(_T("找不到语音输入设备!"));
 		return FALSE;
 	}
-
-	CheckRadioButton(IDC_RADIO_CHANNEL_ONE,IDC_RADIO_CHANNEL_TWO,IDC_RADIO_CHANNEL_ONE);
-	CheckRadioButton(IDC_RADIO_BITS_8,IDC_RADIO_BITS_16,IDC_RADIO_BITS_8);
-	CheckRadioButton(IDC_RADIO_SAMPLE_1,IDC_RADIO_SAMPLE_3,IDC_RADIO_SAMPLE_1);
+	if ( ! waveOutGetNumDevs() )
+	{
+		MessageBeep(MB_ICONEXCLAMATION);
+		MessageBox(_T("找不到语音输出设备!"));
+		return FALSE;
+	}
 
 	// 分配空间
 	pWaveHdr1	= (LPWAVEHDR)GlobalAllocPtr(GHND|GMEM_SHARE,sizeof(WAVEHDR));
@@ -171,10 +173,15 @@ BOOL CSendVoiceDlg::OnInitDialog()
 	pInBuffer2	= (char*)GlobalAllocPtr(GHND|GMEM_SHARE,PCMBUFFER_SIZE);
 
 	((CIPAddressCtrl*)GetDlgItem(IDC_IPADDRESS_T1))->SetAddress(htonl(inet_addr("127.0.0.1")));
-	((CIPAddressCtrl*)GetDlgItem(IDC_IPADDRESS_T2))->SetAddress(htonl(inet_addr("192.168.1.185")));
+	((CIPAddressCtrl*)GetDlgItem(IDC_IPADDRESS_T2))->SetAddress(htonl(inet_addr("192.168.1.110")));
 	GetDlgItem(IDC_IPADDRESS_T1)->EnableWindow(FALSE);
 	GetDlgItem(IDC_IPADDRESS_T2)->EnableWindow(FALSE);
 	GetDlgItem(IDC_EDIT_BROWSER)->SetWindowText(_T("d:\\wav.wav"));
+
+	// alloc memery of voice output
+	m_lpHdrOut	= (LPWAVEHDR)GlobalAllocPtr(GHND|GMEM_SHARE,sizeof(WAVEHDR));
+	m_pBufOut1	= (char*)GlobalAllocPtr(GHND|GMEM_SHARE,PCMBUFFER_SIZE);
+	m_pBufOut2	= (char*)GlobalAllocPtr(GHND|GMEM_SHARE,PCMBUFFER_SIZE);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -296,9 +303,9 @@ void CSendVoiceDlg::OnSend()
 		MixerInit(dwMin, dwMax);
 		if (m_hMixer != NULL)
 		{
-			((CSliderCtrl*)GetDlgItem(IDC_SLIDER1))->SetRange(dwMin,dwMax);
+			((CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEIN))->SetRange(dwMin,dwMax);
 			DWORD dwvolume	= GetVolume(m_hMixer,m_dwControlID);
-			((CSliderCtrl*)GetDlgItem(IDC_SLIDER1))->SetPos(dwvolume);
+			((CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEIN))->SetPos(dwvolume);
 			double nPer = (double)dwvolume / (double)dwMax * 100.0;
 			CString str;
 			str.Format(_T("%0.0f%%"),nPer);
@@ -334,6 +341,69 @@ void CSendVoiceDlg::OnSend()
 			hWaveIn = NULL;
 			return;
 		}
+
+		//语音输出
+		if ( (m_SforVoiceOut=socket(AF_INET,SOCK_DGRAM,0)) == INVALID_SOCKET )
+		{
+			MessageBox(_T("Socket For Wave Out Error!"));
+			WSACleanup();
+			return;
+		}
+		m_AcceptAddr.sin_family	= AF_INET;
+		m_AcceptAddr.sin_port	= htons(6666);
+		m_AcceptAddr.sin_addr.s_addr	= htonl(INADDR_ANY);
+		if ( bind(m_SforVoiceOut,(SOCKADDR*)&m_AcceptAddr,sizeof(SOCKADDR)) == SOCKET_ERROR )
+		{
+			MessageBox(_T("Voice out socket bind error!"));  
+			WSACleanup();
+			return;  
+		}
+		//设置Socket为非阻塞模式
+		if ( WSAAsyncSelect(m_SforVoiceOut,hwnd,WM_DATACOME,FD_READ) == SOCKET_ERROR )
+		{
+			MessageBox(_T("Voice out socket select error!")); 
+			WSACleanup();
+			return;  
+		}
+		//open voice output device
+		wBits	= 16;
+		wChannel= 1;
+		dwSample= 22050;
+		// format of voice: 16 bits,22.05KHz,Mono audio
+		format.cbSize			= 0;
+		format.wBitsPerSample	= wBits;		//采样精度
+		format.nChannels		= wChannel;		//单声道，Mono/立体声
+		format.nSamplesPerSec	= dwSample;	//采样率
+		format.nBlockAlign		= format.nChannels * (format.wBitsPerSample/8);		//每样点的字节数
+		format.nAvgBytesPerSec	= format.nSamplesPerSec * format.nBlockAlign;	//数据率		
+		format.wFormatTag		= WAVE_FORMAT_PCM;
+		result = waveOutOpen(&m_hWaveOut,WAVE_MAPPER,(LPWAVEFORMATEX)&format,(DWORD)hwnd,0,CALLBACK_WINDOW);
+		if ( result != MMSYSERR_NOERROR)
+		{
+			TCHAR szError[100];
+			if ( ! waveOutGetErrorText(result, szError, sizeof(szError)))
+			{
+				MessageBeep(MB_ICONEXCLAMATION);
+				MessageBox(szError,_T("Wave Out Error"), MB_ICONEXCLAMATION|MB_OK);
+			} 
+			else
+			{
+				MessageBeep(MB_ICONEXCLAMATION);
+				MessageBox(_T("Unknown Error!"),_T("Wave Out Error"), MB_ICONEXCLAMATION|MB_OK);
+			}
+			m_hWaveOut = NULL;
+			return;
+		}
+		m_bPlayFirst	= TRUE;
+		//waveOut Volume
+		((CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEOUT))->SetRange(0,0xffff);
+		DWORD dwVolumn = 0;
+		waveOutGetVolume(m_hWaveOut,&dwVolumn);
+		((CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEOUT))->SetPos( (dwVolumn & 0xffff0000)>>16 );
+		CString str;
+		str.Format(_T("%0.0f%%"),(double)((dwVolumn & 0xffff0000)>>16) / (double)0xffff * 100.0);
+		GetDlgItem(IDC_STATIC_OUT)->SetWindowTextW(str);
+
 		GetDlgItem(IDC_BUTTON_BEGIN)->SetWindowText(_T("停止讲话"));
 	} 
 	else
@@ -342,6 +412,11 @@ void CSendVoiceDlg::OnSend()
 		waveInClose(hWaveIn);
 
 		hWaveIn = NULL;
+		if (m_SforVoiceOut != INVALID_SOCKET)
+		{
+			closesocket(m_SforVoiceOut);
+			m_SforVoiceOut	= INVALID_SOCKET;
+		}
 		GetDlgItem(IDC_BUTTON_BEGIN)->SetWindowText(_T("开始讲话"));
 	}
 	
@@ -353,6 +428,8 @@ LRESULT CSendVoiceDlg::OnRecordFull(WPARAM wParam, LPARAM lParam)
 	int recordLen		= ((LPWAVEHDR)lParam)->dwBytesRecorded;
 	if ( recordBuf == NULL )
 	{
+		waveInPrepareHeader(hWaveIn, (LPWAVEHDR)lParam, sizeof(WAVEHDR));
+		waveInAddBuffer(hWaveIn,(LPWAVEHDR)lParam, sizeof(WAVEHDR));
 		waveInReset(hWaveIn);
 		return 0;
 	}
@@ -410,16 +487,32 @@ LRESULT CSendVoiceDlg::OnRecordClose(WPARAM wParam, LPARAM lParam)
 void CSendVoiceDlg::OnCancel()
 {
 	// TODO: Add your specialized code here and/or call the base class
-	waveInReset(hWaveIn);
-	waveInClose(hWaveIn);
-
-	waveInUnprepareHeader(hWaveIn, pWaveHdr1, sizeof(WAVEHDR));
-	waveInUnprepareHeader(hWaveIn, pWaveHdr2, sizeof(WAVEHDR));
+	if (hWaveIn != NULL)
+	{
+		waveInReset(hWaveIn);
+		waveInUnprepareHeader(hWaveIn, pWaveHdr1, sizeof(WAVEHDR));
+		waveInUnprepareHeader(hWaveIn, pWaveHdr2, sizeof(WAVEHDR));
+		waveInClose(hWaveIn);
+	}
 
 	GlobalFreePtr(pInBuffer1);
 	GlobalFreePtr(pInBuffer2);
 	GlobalFreePtr(pWaveHdr1);
 	GlobalFreePtr(pWaveHdr2);
+	if ( m_SforVoiceIn != INVALID_SOCKET)
+		closesocket(m_SforVoiceIn);
+
+	if ( m_SforVoiceOut)
+		closesocket(m_SforVoiceOut);
+	if ( m_hWaveOut != NULL )
+	{
+		waveOutReset(m_hWaveOut);
+		waveOutUnprepareHeader(m_hWaveOut,m_lpHdrOut,sizeof(WAVEHDR));
+		waveOutClose(m_hWaveOut);
+	}
+	GlobalFreePtr(m_lpHdrOut);
+	GlobalFreePtr(m_pBufOut1);
+	GlobalFreePtr(m_pBufOut2);
 
 	CDialogEx::OnCancel();
 }
@@ -610,11 +703,11 @@ void CSendVoiceDlg::OnCheckT2()
 void CSendVoiceDlg::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
 {
 	// TODO: Add your message handler code here and/or call default
-	if (hWaveIn!=NULL && pScrollBar->m_hWnd==GetDlgItem(IDC_SLIDER1)->m_hWnd)
+	if (hWaveIn!=NULL && pScrollBar->m_hWnd==GetDlgItem(IDC_SLIDER_WAVEIN)->m_hWnd)
 	{
 		if (m_hMixer != NULL)
 		{
-			CSliderCtrl* pSlider = (CSliderCtrl*)GetDlgItem(IDC_SLIDER1);
+			CSliderCtrl* pSlider = (CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEIN);
 			DWORD nSliderPos = pSlider->GetPos();
 			SetVolume(m_hMixer,m_dwControlID,nSliderPos);
 			DWORD dwMax	= pSlider->GetRangeMax();
@@ -623,6 +716,20 @@ void CSendVoiceDlg::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
 			str.Format(_T("%0.0f%%"),nPer);
 			GetDlgItem(IDC_STATIC_VOLUME)->SetWindowText(str);
 		}
+	}
+	
+	if ( m_hWaveOut!=NULL && pScrollBar->m_hWnd == GetDlgItem(IDC_SLIDER_WAVEOUT)->m_hWnd )
+	{
+		CSliderCtrl* pSlider;
+		DWORD nSliderPos;
+		pSlider = (CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEOUT);
+		nSliderPos = pSlider->GetPos();
+		nSliderPos = (nSliderPos << 16);
+		nSliderPos |= nSliderPos;
+		waveOutSetVolume(m_hWaveOut, nSliderPos);
+		CString str;
+		str.Format(_T("%0.0f%%"),(double)((nSliderPos & 0xffff0000)>>16) / (double)0xffff * 100.0);
+		GetDlgItem(IDC_STATIC_OUT)->SetWindowTextW(str);
 	}
 
 	CDialogEx::OnHScroll(nSBCode, nPos, pScrollBar);
@@ -909,7 +1016,7 @@ void CSendVoiceDlg::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
 
 LRESULT CSendVoiceDlg::OnVolumeChanged(WPARAM wParam, LPARAM lParam)
 {
-	CSliderCtrl* pSlider = (CSliderCtrl*)GetDlgItem(IDC_SLIDER1);
+	CSliderCtrl* pSlider = (CSliderCtrl*)GetDlgItem(IDC_SLIDER_WAVEIN);
 	HMIXER hMixer = (HMIXER)wParam;
 	DWORD dwControlID = (DWORD)lParam;
 
@@ -1035,4 +1142,56 @@ void CSendVoiceDlg::SetVolume(HMIXER hMixer, DWORD dwControlID, DWORD dwVolume)
 		MessageBox(_T("mixerGetControlDetails Error!"));
 		return;
 	}
+}
+
+
+// receive voice
+LRESULT CSendVoiceDlg::OnDataCome(WPARAM wParam, LPARAM lParam)
+{
+	if (WSAGETSELECTERROR(lParam))
+	{
+		return 0;
+	}
+	if ( WSAGETSELECTEVENT(lParam) != FD_READ)
+	{
+		return 0;
+	}
+	int nRecLen;
+	if (m_bPlayFirst)
+	{
+		nRecLen = recvfrom(m_SforVoiceOut,m_pBufOut1,PCMBUFFER_SIZE,0,(SOCKADDR*)&m_AcceptAddr,&m_nAcceptAddrLen);
+		if (nRecLen == SOCKET_ERROR )	return 0;
+		if (nRecLen != PCMBUFFER_SIZE )		return 0;
+		m_bPlayFirst = FALSE;
+		::PostMessage(hwnd,WM_PLAY,0,0);
+	} 
+	else
+	{
+		nRecLen = recvfrom(m_SforVoiceOut,m_pBufOut2,PCMBUFFER_SIZE,0,(SOCKADDR*)&m_AcceptAddr,&m_nAcceptAddrLen);
+		if (nRecLen == SOCKET_ERROR )	return 0;
+		if (nRecLen != PCMBUFFER_SIZE )		return 0;
+		m_bPlayFirst = TRUE;
+		::PostMessage(hwnd,WM_PLAY,0,0);
+	}
+	return 0;
+}
+
+// play sound
+LRESULT CSendVoiceDlg::OnPlay(WPARAM wParam, LPARAM lParam)
+{
+	if ( m_bPlayFirst )
+		m_lpHdrOut->lpData = (LPSTR)m_pBufOut1;
+	else
+		m_lpHdrOut->lpData = (LPSTR)m_pBufOut2;
+	m_lpHdrOut->dwBufferLength	= PCMBUFFER_SIZE;
+	m_lpHdrOut->dwBytesRecorded	= 0;
+	m_lpHdrOut->dwFlags			= WHDR_BEGINLOOP;
+	m_lpHdrOut->dwLoops			= 1;
+	m_lpHdrOut->dwUser			= 0;
+	m_lpHdrOut->lpNext			= NULL;
+	m_lpHdrOut->reserved		= 0;
+	waveOutPrepareHeader(m_hWaveOut,m_lpHdrOut,sizeof(WAVEHDR));
+	waveOutWrite(m_hWaveOut,m_lpHdrOut,sizeof(WAVEHDR));
+
+	return 0;
 }

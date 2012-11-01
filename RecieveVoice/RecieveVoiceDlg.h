@@ -65,4 +65,28 @@ public:
 	CRITICAL_SECTION m_section;
 	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
 	afx_msg void OnDestroy();
+
+protected:
+	/// 语音输入
+	SOCKET m_SforVoiceIn;
+	SOCKADDR_IN m_SendAddr;
+	int m_nSendAddrLen;
+	HWAVEIN		m_hWavein;
+	LPWAVEHDR	m_lpHdrIn1;
+	LPWAVEHDR	m_lpHdrIn2;
+	char*		m_pBufIn1;
+	char*		m_pBufIn2;
+	afx_msg LRESULT OnRecordFull(WPARAM wParam, LPARAM lParam);
+
+	//音量控制
+	HMIXER m_hMixer;
+	// MIXERCONTROL结构中的dwControlID
+	DWORD m_dwControlID;
+	afx_msg LRESULT OnVolumeChanged(WPARAM wParam, LPARAM lParam);
+	// 初始化音量控制
+	BOOL MixerInit(DWORD& dwMin, DWORD& dwMax);
+	// 获取音量
+	DWORD GetVolume(HMIXER hMixer, DWORD dwControlID);
+	// 设备音量
+	void SetVolume(HMIXER hMixer, DWORD dwControlID, DWORD dwVolume);
 };

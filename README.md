@@ -2,10 +2,10 @@ SendRecieveVoice
 ================
 
 Send and Recieve Voice demo used Windows API waveInXXX and waveOutXXX.  
-ä½¿ç”¨WindowsAPI waveInXXXå’ŒwaveOutXXXåˆ¶ä½œçš„å‘é€å’ŒæŽ¥æ”¶è¯­éŸ³ä¿¡æ¯çš„ä¾‹å­ã€‚
+Ê¹ÓÃWindowsAPI waveInXXXºÍwaveOutXXXÖÆ×÷µÄ·¢ËÍºÍ½ÓÊÕÓïÒôÐÅÏ¢µÄÀý×Ó¡£
 
-ç‰ˆæœ¬1.0ï¼š
-1ã€‚å®žçŽ°çš„åŠŸèƒ½æœ‰é‡‡é›†éº¦å…‹é£Žçš„å£°éŸ³
-2ã€‚å‘ä¸€ä¸ªæˆ–è€…ä¸¤ä¸ªç»ˆç«¯å‘é€éŸ³é¢‘æ•°æ®å¹¶æ’­æ”¾å£°éŸ³
-3ã€‚åŒæ—¶èƒ½å¤Ÿä¿å­˜æˆWAVæ ¼å¼æ–‡ä»¶
-4ã€‚èƒ½å¤ŸæŽ§åˆ¶è®²è¯çš„è¾“å…¥éŸ³é‡å’Œæ’­æ”¾çš„è¾“å‡ºéŸ³é‡ã€‚
+°æ±¾1.0£º
+1¡£ÊµÏÖµÄ¹¦ÄÜÓÐ²É¼¯Âó¿Ë·çµÄÉùÒô  
+2¡£ÏòÒ»¸ö»òÕßÁ½¸öÖÕ¶Ë·¢ËÍÒôÆµÊý¾Ý²¢²¥·ÅÉùÒô  
+3¡£Í¬Ê±ÄÜ¹»±£´æ³ÉWAV¸ñÊ½ÎÄ¼þ  
+4¡£ÄÜ¹»¿ØÖÆ½²»°µÄÊäÈëÒôÁ¿ºÍ²¥·ÅµÄÊä³öÒôÁ¿¡£  

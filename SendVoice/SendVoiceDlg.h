@@ -9,6 +9,8 @@
 #define BLOCK_PER_BUFFER	3				//接收语音数据块
 #define FRAME_NUM			8				//采样精确度
 #define PCMBUFFER_SIZE		360*FRAME_NUM	//录音缓冲区大小
+#define WM_DATACOME			WM_USER+1		//接收数据
+#define WM_PLAY				WM_USER+2		//播放声音
 
 #include <vector>
 using namespace std;
@@ -99,4 +101,17 @@ public:
 	DWORD GetVolume(HMIXER hMixer, DWORD dwControlID);
 	// 设备音量
 	void SetVolume(HMIXER hMixer, DWORD dwControlID, DWORD dwVolume);
+
+protected:
+	//语音输出
+	HWAVEOUT	m_hWaveOut;
+	LPWAVEHDR	m_lpHdrOut;
+	char*		m_pBufOut1;
+	char*		m_pBufOut2;
+	SOCKET		m_SforVoiceOut;
+	SOCKADDR_IN	m_AcceptAddr;
+	int			m_nAcceptAddrLen;
+	BOOL		m_bPlayFirst;
+	afx_msg LRESULT OnDataCome(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnPlay(WPARAM wParam, LPARAM lParam);
 };
