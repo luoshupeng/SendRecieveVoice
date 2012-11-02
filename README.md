@@ -2,7 +2,8 @@ SendRecieveVoice
 ================
 
 Send and Recieve Voice demo used Windows API waveInXXX and waveOutXXX.  
-使用WindowsAPI waveInXXX和waveOutXXX制作的发送和接收语音信息的例子。
+使用WindowsAPI waveInXXX和waveOutXXX制作的发送和接收语音信息的例子。  
+编译环境：VS2010SP1+Windows7SP1
 
 版本2.0：   
 1.发送端增加接收接收端回答功能  
