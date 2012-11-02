@@ -11,7 +11,7 @@ Send and Recieve Voice demo used Windows API waveInXXX and waveOutXXX.
 4.接收端增加管理录音音量功能  
 
 
-版本1.0： 
+版本1.0：  
 1。实现的功能有采集麦克风的声音  
 2。向一个或者两个终端发送音频数据并播放声音  
 3。同时能够保存成WAV格式文件  
