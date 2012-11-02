@@ -8,6 +8,8 @@
 
 #define BLOCK_PER_BUFFER	3				//接收语音数据块
 #define FRAME_NUM			8				//采样精确度
+/*这个缓冲区大小是发送缓冲区大小，如果大于1K则UDP的sendto函数会分包，
+* 导致在若sendto目标不可连接时sendto函数会延迟返回，从而造成界面卡*/
 #define PCMBUFFER_SIZE		360*FRAME_NUM	//录音缓冲区大小
 #define WM_DATACOME			WM_USER+1		//接收数据
 #define WM_PLAY				WM_USER+2		//播放声音
