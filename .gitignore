@@ -7,12 +7,9 @@
 *.lib
 
 Debug/
-ipch
-
-SendVoice/Debug/
-SendVoice/Release/
-
-RecieveVoice/Debug/
-RecieveVoice/Release/
-
 Release/
+ipch/
+
+
+
+
